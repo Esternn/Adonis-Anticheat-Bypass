@@ -8,7 +8,7 @@ if (not adonis) then
     do return end;
 end
 
-local exit: boolean = false;
+-- local exit: boolean = false;
 local function genload(): {{string}}
     local buf: {{string}} = {};
     for j = 1, 30 do
@@ -22,8 +22,6 @@ local function genload(): {{string}}
     end
     return buf;
 end
-
-local hookfunction: ((any...) -> any..., (any...) -> any...) -> (any...) -> any... = hookfunction;
 
 if (not hookfunction) then
     warn("Anticheat is enabled but no hookfunction is provided with your exploit, balling out now: you're on your own(get a better exploit please)");
