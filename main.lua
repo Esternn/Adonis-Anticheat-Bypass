@@ -2,7 +2,7 @@ local GuiService = game:GetService("GuiService")
 --remade
 local function getnil(name: string, classname: string): Instance? for _,v in pairs(getnilinstances()) do if (v.Name == name) and v:IsA(classname) then return v end end end
 local function waitfornil(name: string, classname: string, timeout: number) local oldtime: number = time(); while (((time() - oldtime) <= timeout) and task.wait()) do local v: Instance? = getnil(name, classname); if (v) then return v end end end
-local adonis: ModuleScript? = getnil("\n\n\n\n\nModuleScript", "ModuleScript");
+local adonis: ModuleScript? = waitfornil("\n\n\n\n\nModuleScript", "ModuleScript", 5);
 if (not adonis) then
     print("No adonis detected, aborting...");
     do return end;
