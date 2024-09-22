@@ -1,4 +1,4 @@
-local GuiService = game:GetService("GuiService")
+-- local GuiService = game:GetService("GuiService")
 --remade
 local function getnil(name: string, classname: string): Instance? for _,v in pairs(getnilinstances()) do if (v.Name == name) and v:IsA(classname) then return v end end end
 local function waitfornil(name: string, classname: string, timeout: number) local oldtime: number = time(); while (((time() - oldtime) <= timeout) and task.wait()) do local v: Instance? = getnil(name, classname); if (v) then return v end end end
@@ -56,7 +56,11 @@ local adonis: {} = searchGC(function(v: {any} | any)
         local env: {any} = getfenv(v) or {};
         local check = false;
         env["task"] = {{wait = function(t) check = t == 2e2; end}};
-        env["Detected"] = function(s) check = s == "Kick" end;
+        local fn = debug.getupvalue(v, 1); 
+        if (not debug.getinfo(fn).name == "Detected") then
+            return;
+        end
+        hookfunction(fn, function() check = t == "Kick" end)
         pcall(v);
         if (not check) then
             return false;
@@ -93,7 +97,7 @@ local function hookmeta(tabl: any, name: string, func: (any...) -> any...)
 end
 
 do
-    local old: {[string]: any};
+    local old: (any...) -> any...;
     old = hookmeta(game, "__namecall", function(self, ...)
         if (self == game:GetService("Workspace") and getnamecallmethod() == "GetRealPhysicsFPS") then
             return math.huge;
@@ -103,9 +107,9 @@ do
 end
 
 do
-    local old: {[string]: any};
+    local old: (any...) -> any...;
     old = hookmeta(game, "__namecall", function(self, ...)
-        if (self == game and getnamecallmethod == "IsLoaded") then
+        if (self == game and getnamecallmethod() == "IsLoaded") then
             local proto: (any...) -> any... = debug.getproto(1, 1)
             if (not proto) then
                 return old(self, ...)
