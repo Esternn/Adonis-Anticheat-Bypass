@@ -107,7 +107,7 @@ do
     end);
     if (stack) then
         for k,v in pairs(stack) do
-            setmetatable(stack[k], {__newindex = function(_, i) stack[k][i] = setmetatable({}, {__neq = function() return false end}) end});
+            setmetatable(stack[k], {__newindex = function() end});
         end
     end
     local oldindex;
