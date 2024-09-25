@@ -1,184 +1,282 @@
--- local GuiService = game:GetService("GuiService")
---remade
-local function getnil(name: string, classname: string): Instance? for _,v in pairs(getnilinstances()) do if (v.Name == name) and v:IsA(classname) then return v end end end
-local function waitfornil(name: string, classname: string, timeout: number) local oldtime: number = time(); while (((time() - oldtime) <= timeout) and task.wait()) do local v: Instance? = getnil(name, classname); if (v) then return v end end end
-local adonis: ModuleScript? = waitfornil("\n\n\n\n\nModuleScript", "ModuleScript", 5);
-if (not adonis) then
-    print("No adonis detected, aborting...");
-    do return end;
-end
-
--- local exit: boolean = false;
-local function genload(): {{string}}
-    local buf: {{string}} = {};
-    for j = 1, 30 do
-        for i = 1, 125 do
-            if (i % 2) == 0 then
-                buf[j] = (buf[j] or '') .. '\0';
-                continue;
-            end
-            buf[j] = (buf[j] or '') .. math.random(0, 255);
+local function getMod(val: (ModuleScript) -> boolean): ModuleScript?
+    for _,v in getloadedmodules() do
+        if (val(v)) then
+            return v;
         end
     end
-    return buf;
 end
 
-if (not hookfunction) then
-    warn("Anticheat is enabled but no hookfunction is provided with your exploit, balling out now: you're on your own(get a better exploit please)");
-    do return end;
-end
-if (newcclosure and not pcall(hookfunction, newcclosure(function() return end), function() end)) then
-    warn("Your exploit blocks c closures from being hooked, balling out now: you're on your own now(maybe move to CoreScript thread?)")
-    do return end;
+local function getGC(fn: (any) -> boolean)
+    for _,v: any in getgc(true) do
+        if (fn(v)) then
+            return v
+        end
+    end
+end;
+
+local function waitForMod(val: (ModuleScript) -> boolean, timeout: number)
+    local old: number = time();
+    local mod = getMod(val);
+    while ((time() - old) < (timeout and timeout * 1000 or math.huge) and task.wait() and not mod) do
+        if ((time() - old) == 5000) then
+            warn("Infinite yield possible on module script");
+        end
+        mod = getMod(val);
+    end
+    return mod;
 end
 
-local getmeta: ({any}) -> ({any})? = getrawmetatable or debug.getmetatable
-if (not getmeta) then
-    warn("Anticheat is enabled but no metatable-hook-functions are included by your executor, balling out now: you're on your own...");
-    do return end;
-end
-
-local function searchGC(map: (any) -> boolean) for _,v in getgc(true) do if (map(v)) then return v end end end
-
-local adonis: {} = searchGC(function(v: {any} | any)
-    if (type(v) ~= "table") then
+local adonismod: ModuleScript? = waitForMod(newcclosure(function(v: ModuleScript): boolean
+    local suc, ret: boolean & any = pcall(require, v);
+    if (not suc) then
         return false;
     end
-    if (select(2, pcall(getmetatable, v)) ~= "This metatable is locked") then
+    if (type(ret) ~= "function") then
         return false;
     end
-    local meta: {[string]: () -> nil} = getmeta(v);
-    for i,v in pairs(meta) do
-        if (type(v) ~= "function") then continue end;
-        if (type(debug.getupvalue(v, 1)) ~= "function") then
-            return false;
-        end
-        local env: {any} = getfenv(v) or {};
-        local check = false;
-        env["task"] = {{wait = function(t) check = t == 2e2; end}};
-        local fn = debug.getupvalue(v, 1); 
-        if (not debug.getinfo(fn).name == "Detected") then
-            return;
-        end
-        hookfunction(fn, function() check = t == "Kick" end)
-        pcall(v);
-        if (not check) then
+
+    local protonames: {[string]: number} = {
+        Init = 4,
+        RunAfterLoaded = 1,
+        RunLast = 1,
+        Detected = 6,
+        compareTables = 1
+    };
+    local protos: {[number]: (any...) -> any} = debug.getprotos(ret) or {};
+    for _,v in pairs(protos) do
+        if (protonames[debug.getinfo(v).name] ~= #debug.getupvalues(protos)) then
             return false;
         end
     end
+
     return true;
-end);
+end, 5));
 
-for k in getmeta(adonis) do
-    getmeta(adonis)[k] = function() end;
+if (not adonismod) then
+    do return end;
 end
 
-local function hookmeta(tabl: any, name: string, func: (any...) -> any...)
-    if (hookmetamethod) then
-        return hookmetamethod(tabl, name, newcclosure and newcclosure(func) or func);
+-- antiproxy detection
+do
+    local proxy: {}? = getGC(function(v: any): boolean
+        if (type(v) ~= "userdata") then
+            return false;
+        end
+        if (pcall(setmetatable, v, getmetatable(v)) or select(2, pcall(setmetatable, v, getmetatable(v))) ~= "This metatable is locked") then
+            return false;
+        end
+        local meta: {[string]: () -> any}? = getrawmetatable(v);
+        if (not meta) then
+            return false;
+        end
+        meta.__metatable = nil;
+        for k: string,v: () -> any in pairs(meta) do
+            if (not k:match("^__")) then
+                return false;
+            end
+            if (type(debug.getupvalue(v, 1)) ~= "function") then
+                return false;
+            end
+        end
+        return true;
+    end);
+    if (proxy) then
+        for k in getrawmetatable(proxy) do
+            getrawmetatable(proxy)[k] = function() end
+        end
     end
-    if (isreadonly and isreadonly(tabl)) then
-        setreadonly(tabl, false);
-    end
-    func = newcclosure and newcclosure(func) or func;
-    local meta: {any}? = getmeta(tabl);
-    if (not meta) then
-        return;
-    end
-    local method: any = meta[name];
-    if (not method) then
-        error(`No metamethod {name} found in table!`);
-    end
-    meta[name] = func;
-    if (setreadonly) then
-        setreadonly(tabl, true);
-    end
-    return method;
 end
+
+--anti anti hooks p1: instances
+do
+    local stack: {[string]: {any}}? = getGC(function(v: {[string]: {any}} | any): boolean
+        if (type(v) ~= "table") then
+            return false;
+        end
+
+        if (not (select(2, pcall(function() v['\0'] = nil end)) or ""):find("attempt to modify a readonly table")) then
+            return false;
+        end
+
+        for k in pairs(v) do
+            if (not k:lower():find("enum") and not k:lower():find("instance")) then
+                return false;
+            end
+        end
+        return true;
+    end);
+    if (stack) then
+        for k,v in pairs(stack) do
+            setmetatable(stack[k], {__newindex = function(_, i) stack[k][i] = setmetatable({}, {__neq = function() return false end}) end});
+        end
+    end
+    local oldindex;
+    oldindex = hookmetamethod(game, "__index", newcclosure(function(self, k)
+        if (not k or not self) then
+            return error(oldindex(nil, nil));
+        end
+        return oldindex(self, k)
+    end));
+    local oldnindex;
+    oldnindex = hookmetamethod(game, "__newindex", newcclosure(function(self, k, v)
+        if (not k or not self or not v) then
+            return error(oldnindex(nil, nil));
+        end
+        return oldnindex(self, k, v)
+    end));
+    local oldnmcall;
+    oldnmcall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        if (not self or not getnamecallmethod() or getnamecallmethod() == '') then
+            return error(oldnindex(nil, nil));
+        end
+        return oldnindex(self, ...);
+    end));
+end
+
+--part 2: enums
+do
+    local oldindex;
+    oldindex = hookmetamethod(Enum.HumanoidStateType, "__index", newcclosure(function(self, k)
+        if (not k or not self) then
+            return error(oldindex(nil, nil));
+        end
+        return oldindex(self, k)
+    end));
+    local oldnindex;
+    oldnindex = hookmetamethod(Enum.HumanoidStateType, "__newindex", newcclosure(function(self, k, v)
+        if (not k or not self or not v) then
+            return error(oldnindex(nil, nil));
+        end
+        return oldnindex(self, k, v)
+    end));
+    local oldnmcall;
+    oldnmcall = hookmetamethod(Enum.HumanoidStateType, "__namecall", newcclosure(function(self, ...)
+        if (not self or not getnamecallmethod() or getnamecallmethod() == '') then
+            return error(oldnindex(nil, nil));
+        end
+        return oldnindex(self, ...);
+    end));
+end
+
+-- anti anti anti kick
 
 do
-    local old: (any...) -> any...;
-    old = hookmeta(game, "__namecall", function(self, ...)
-        if (self == game:GetService("Workspace") and getnamecallmethod() == "GetRealPhysicsFPS") then
-            return math.huge;
+    local old;
+    local oldk = game:GetService("Players").LocalPlayer.Kick;
+    hookfunction(game:GetService("Players").LocalPlayer.Kick, newcclosure(function(self, msg)
+        if (self ~= game:GetService("Players").LocalPlayer) then
+            return error("Expected ':' not '.' calling member function Kick");
+        end
+        return oldk(self, msg);
+    end));
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        if (getnamecallmethod() == "Kick" and not self:IsA("Player")) then
+            return error(`Kick is not a valid member of {self.ClassName} "{self:GetFullName()}"`);
+        end
+        if (getnamecallmethod() == "Kick" and self:IsA("Player") and self.Parent == game:GetService("Players") and self ~= game:GetService("Players").LocalPlayer) then
+            return error("Cannot kick a non-local Player from a LocalScript");
+        end
+        if (getnamecallmethod() ~= "Kick" and getnamecallmethod:lower() == "kick" and self == game:GetService("Players").LocalPlayer) then
+            return error(`{getnamecallmethod()} is not a valid member of Player {game:GetService("Players").LocalPlayer:GetFullName()}`);
         end
         return old(self, ...);
+    end))
+end
+
+-- anti anti fps spoof
+do
+    local old = workspace.GetRealPhysicsFPS;
+    hookfunction(workspace.GetRealPhysicsFPS, newcclosure(function(self)
+        if (self ~= workspace) then
+            return error("Expected ':' not '.' calling member function GetRealPhysicsFPS");
+        end
+    end))
+end
+
+-- anti anti anti log service
+do
+    local oldlog = game:GetService("LogService").GetLogHistory;
+    hookfunction(game:GetService("LogService").GetLogHistory, function(self)
+        if (self ~= game:GetService("LogService")) then
+            return error("Expected ':' not '.' calling member function GetLogHistory");
+        end
+    end)
+    local old;
+    hookmetamethod(game, "__namecall", function(self, ...)
+        if (getnamecallmethod() ~= "GetLogHistory" and getnamecallmethod():lower() == "getloghistory" and self == game:GetService("LogService")) then
+            return error(`{getnamecallmethod()} is not a valid member of LogService "{game:GetService("LogService"):GetFullName()}"`)
+        end
+        if (getnamecallmethod() == "GetLogHistory" and self ~= game:GetService("LogService")) then
+            return error(`GetLogHistory is not a valid member of LogService "{self:GetFullName()}"`)
+        end
+        
     end)
 end
 
 do
-    local old: (any...) -> any...;
-    old = hookmeta(game, "__namecall", function(self, ...)
-        if (self == game and getnamecallmethod() == "IsLoaded") then
-            local proto: (any...) -> any... = debug.getproto(1, 1)
-            if (not proto) then
-                return old(self, ...)
+    for _,v: RemoteEvent | any in pairs(getregistry()) do
+        if (not typeof(v) == "Instance" or not v:IsA("RemoteEvent")) then
+            continue
+        end
+        local oldf = v.FireServer
+        hookfunction(v.FireServer, function(self, ...)
+            if (self ~= v) then
+                return error("Expected ':' not '.' calling member function FireServer");
             end
-            if (debug.getinfo(proto).name == "idleTamper" and debug.getupvalue(proto, 1) == false) then
-                return task.wait(9e9)
+        end)
+    end
+    game.DescendantAdded:Connect(function(v)
+        if (not typeof(v) == "Instance" or not v:IsA("RemoteEvent")) then
+            return;
+        end
+        local oldf = v.FireServer
+        hookfunction(v.FIreServer, function(self, ...)
+            if (self ~= v) then
+                return error("Expected ':' not '.' calling member function FireServer");
             end
+        end)
+    end)
+    local old;
+    hookmetamethod(game, "__namecall", function(self, ...)
+        if (getnamecallmethod() ~= "FireServer" and getnamecallmethod():lower() == "fireserver" and self:IsA("RemoteEvent")) then
+            return error(`{getnamecallmethod()} is not a valid member of RemoteEvent "{self:GetFullName()}"`)
+        end
+        if (getnamecallmethod() == "FireServer" and not self:IsA("RemoteEvent")) then
+            return error(`FireServer is not a valid member of {self.ClassName} "{self:GetFullName()}"`)
         end
     end)
 end
-do
-    local old;
-    game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
-        local humanoid: Humanoid = char.Humanoid;
-        if (not humanoid) then return; end
-        old = hookmeta(humanoid.StateChanged, "__namecall", function(self, f, ...)
-            if (self == humanoid.StateChanged and getnamecallmethod():lower() == "connect") then
-                return old(function(s)
-                    if (s == Enum.HumanoidStateType.StrafingNoPhysics) then
-                        return;
-                    end
-                    f(s);
-                end)
-            end
-            return old(self, f, ...);
-        end)
-    end)
-end
 
 do
-    local old;
-    game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
-        local humanoid: Humanoid = char.Humanoid;
-        if (not humanoid) then return; end
-        old = hookmeta(game "__namecall", function(self, ...)
-            if (self == humanoid and getnamecallmethod():lower() == "getstate" and old(self, ...) == Enum.HumanoidStateType.StrafingNoPhysics) then
-                return Enum.HumanoidStateType.Running;
-            end
-            return old(self, ...);
-        end)
-    end)
-end
-
-do
-    local old;
-    old = hookmeta(game, "__index", function(self, k)
-        if (self == game:GetService("GuiService") and k == "MenuIsOpen") then
-            local proto: (any...) -> any... = debug.getproto(1, 1);
-            if (not proto) then
-                return old(self, k)
-            end
-            if (debug.getinfo(proto).name == "getCoreUrls" and debug.getupvalues(proto) == {}) then
-                return task.wait(9e9);
-            end
+    for _,v: RemoteFunction | any in pairs(getregistry()) do
+        if (not typeof(v) == "Instance" or not v:IsA("RemoteFunction")) then
+            continue
         end
+        local oldf = v.InvokeServer
+        hookfunction(v.InvokeServer, function(self, ...)
+            if (self ~= v) then
+                return error("Expected ':' not '.' calling member function InvokeServer");
+            end
+        end)
+    end
+    game.DescendantAdded:Connect(function(v)
+        if (not typeof(v) == "Instance" or not v:IsA("RemoteFunction")) then
+            return;
+        end
+        local oldf = v.InvokeServer
+        hookfunction(v.InvokeServer, function(self, ...)
+            if (self ~= v) then
+                return error("Expected ':' not '.' calling member function InvokeServer");
+            end
+        end)
     end)
-end
-
-do
     local old;
-    old = hookmeta(game, "__index", function(self, k)
-        if (self == game:GetService("PolicyService") and k == "") then
-            local check, checkServ: (any...) -> any... = debug.getproto(1, 1), debug.getproto(1, 1)
-            if (not check or not checkServ) then
-                return old(self, k);
-            end
-            if (debug.getinfo(check).name == "check" and debug.getinfo(checkServ) == "checkServ" and debug.getupvalue(check, 1) and type(debug.getupvalue(check, 1)) == "table" and debug.getupvalue(check, 1)[1] == "current identity is [0789]") then
-                return task.wait(9e9)
-            end
+    hookmetamethod(game, "__namecall", function(self, ...)
+        if (getnamecallmethod() ~= "InvokeServer" and getnamecallmethod():lower() == "invokeserver" and self:IsA("RemoteFunction")) then
+            return error(`{getnamecallmethod()} is not a valid member of RemoteEvent "{self:GetFullName()}"`)
+        end
+        if (getnamecallmethod() == "InvokeServer" and not self:IsA("RemoteFunction")) then
+            return error(`InvokeServer is not a valid member of {self.ClassName} "{self:GetFullName()}"`)
         end
     end)
 end
