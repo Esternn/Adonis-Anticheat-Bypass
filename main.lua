@@ -44,7 +44,7 @@ local adonismod: ModuleScript? = waitForMod(newcclosure(function(v: ModuleScript
     };
     local protos: {[number]: (any...) -> any} = debug.getprotos(ret) or {};
     for _,v in pairs(protos) do
-        if (protonames[debug.getinfo(v).name] ~= #debug.getupvalues(protos)) then
+        if (protonames[debug.getinfo(v).name] ~= #debug.getupvalues(v)) then
             return false;
         end
     end
