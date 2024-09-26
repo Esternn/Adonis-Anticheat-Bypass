@@ -33,7 +33,7 @@ task.spawn(function()
             if ((not debug.getinfo(debug.getupvalue(v, 1)).name or ""):find("Detected")) then
                 return false;
             end
-            if (not i:find("^__")) then
+            if (not i:match("^__%l+$")) then
                 return false;
             end
             local env: {[string]: any} = getfenv(v);
